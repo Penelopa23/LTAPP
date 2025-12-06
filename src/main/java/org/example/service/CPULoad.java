@@ -30,9 +30,9 @@ public class CPULoad {
         public void run() {
             while (load) {
                 // Нагрузим CPU, выполняя множество математических операций.
-                double result = 0;
-                for (int i = 0; i < 1000000; i++) {
-                    result += Math.random() * Math.random();
+                double x = 0;
+                for (int i = 0; i < 1_000_000; i++) {
+                    x += Math.sin(i); // или просто x += i * 1.000001;
                 }
             }
         }

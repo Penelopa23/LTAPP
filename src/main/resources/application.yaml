@@ -15,38 +15,58 @@ management:
 
 
 #swagger
-xset:
+x5:
   openapi:
     dev-url: http://localhost:8080
-    prod-url: https://xset-api.com
+    prod-url: https://x5-api.com
 
 #database
+# Environment variables:
+#   LTAPP_DB_URL - Database connection URL (default: jdbc:postgresql://localhost:55000/ltapp)
+#   LTAPP_DB_USER - Database username (default: postgres)
+#   LTAPP_DB_PASSWORD - Database password (default: empty)
 spring:
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none  # Schema managed by Flyway migrations
     properties:
       hibernate:
         format_sql: true
     show-sql: false
   datasource:
-    url: jdbc:postgresql://${PSQL_HOST:0.0.0.0}:55000/postgres
-    username: postgres
-    password:
+    url: ${LTAPP_DB_URL:jdbc:postgresql://${PSQL_HOST:0.0.0.0}:55000/postgres}
+    username: ${LTAPP_DB_USER:postgres}
+    password: ${LTAPP_DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
+  # Flyway configuration
+  # Environment variables:
+  #   LTAPP_FLYWAY_BASELINE_ON_MIGRATE - Set to 'true' for dev DBs with existing schema (default: false)
+  #   LTAPP_FLYWAY_ENABLED - Enable/disable Flyway (default: true)
+  flyway:
+    enabled: ${LTAPP_FLYWAY_ENABLED:true}
+    baseline-on-migrate: ${LTAPP_FLYWAY_BASELINE_ON_MIGRATE:false}  # Set to true only for dev DBs with existing schema
+    locations: classpath:db/migration
+    baseline-version: 0
+    baseline-description: "Initial baseline for existing schema"
+    validate-on-migrate: ${LTAPP_FLYWAY_VALIDATE_ON_MIGRATE:true}  # Set to false to skip validation for existing schemas
   #uploads
   servlet:
     multipart:
       enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
 #kafka all properties https://docs.spring.io/spring-boot/docs/current/reference/html/application-properties.html
+# Environment variables:
+#   LTAPP_KAFKA_BOOTSTRAP_SERVERS - Kafka bootstrap servers (default: 0.0.0.0:9092)
+#   LTAPP_KAFKA_TOPIC - Kafka topic name (default: registration)
   kafka:
     producer:
-      bootstrap-servers: 0.0.0.0:9092
+      bootstrap-servers: ${LTAPP_KAFKA_BOOTSTRAP_SERVERS:0.0.0.0:9092}
     consumer:
-      bootstrap-servers: 0.0.0.0:9092
+      bootstrap-servers: ${LTAPP_KAFKA_BOOTSTRAP_SERVERS:0.0.0.0:9092}
       group-id: yourGroupId
     template:
-      default-topic: registration
+      default-topic: ${LTAPP_KAFKA_TOPIC:registration}
 
 #JMX
 #-Dcom.sun.management.jmxremote
@@ -55,3 +75,35 @@ spring:
 #-Dcom.sun.management.jmxremote.authenticate=false
 #-Dcom.sun.management.jmxremote.ssl=false
 #-Djava.rmi.server.hostname=YOUR_JMX_HOST
+
+# Authentication Configuration
+# Environment variables:
+#   LTAPP_AUTH_JWT_SECRET - JWT secret key (required, no default in production)
+#   LTAPP_AUTH_JWT_EXPIRATION - Token expiration in seconds (default: 3600)
+ltapp:
+  auth:
+    jwt:
+      secret: ${LTAPP_AUTH_JWT_SECRET:dev-secret-key-change-in-production-min-32-chars}
+      expiration: ${LTAPP_AUTH_JWT_EXPIRATION:3600} # seconds
+  sign:
+    processing-delay-ms: ${LTAPP_SIGN_DELAY_MS:0} # Simulated processing delay for load testing
+  load:
+    cpu-threads: ${LTAPP_LOAD_CPU_THREADS:15} # Number of threads for CPU load generation
+    leak-step-bytes: ${LTAPP_LOAD_LEAK_STEP_BYTES:1024} # Memory leak step size in bytes
+  # Database seeding configuration
+  # Environment variables:
+  #   LTAPP_SEED_ENABLED - Enable/disable database seeding (default: false)
+  #   LTAPP_SEED_USERS - Number of users to generate (default: 10)
+  #   LTAPP_SEED_DOCS_PER_USER - Number of documents per user (default: 50)
+  #   LTAPP_SEED_MAX_DOC_VERSION - Maximum document version (default: 5)
+  #   LTAPP_SEED_DAYS_RANGE - Days range for random createdAt timestamps (default: 30)
+  seed:
+    enabled: ${LTAPP_SEED_ENABLED:false}
+    users: ${LTAPP_SEED_USERS:10}
+    docs-per-user: ${LTAPP_SEED_DOCS_PER_USER:50}
+    max-doc-version: ${LTAPP_SEED_MAX_DOC_VERSION:5}
+    days-range: ${LTAPP_SEED_DAYS_RANGE:30}
+
+# Server configuration
+server:
+  port: ${LTAPP_SERVER_PORT:8080}

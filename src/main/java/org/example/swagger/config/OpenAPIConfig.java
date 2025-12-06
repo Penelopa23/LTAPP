@@ -7,9 +7,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 
 /**
@@ -22,16 +25,16 @@ public class OpenAPIConfig {
 
     /**
      * The devUrl variable represents the URL of the development server in the OpenAPIConfig class.
-     * It is retrieved from the application properties using the value of the "xset.openapi.dev-url" key.
+     * It is retrieved from the application properties using the value of the "x5.openapi.dev-url" key.
      */
-    @Value("${xset.openapi.dev-url}")
+    @Value("${x5.openapi.dev-url}")
     private String devUrl;
 
     /**
      * The prodUrl variable represents the URL of the production server in the OpenAPIConfig class.
-     * It is retrieved from the application properties using the value of the "xset.openapi.prod-url" key.
+     * It is retrieved from the application properties using the value of the "x5.openapi.prod-url" key.
      */
-    @Value("${xset.openapi.prod-url}")
+    @Value("${x5.openapi.prod-url}")
     private String prodUrl;
 
     /**
@@ -50,19 +53,37 @@ public class OpenAPIConfig {
         prodServer.setDescription("Server URL in Production environment");
 
         Contact contact = new Contact();
-        contact.setEmail("xset@gmail.com");
-        contact.setName("XSet");
-        contact.setUrl("https://www.xset.com");
+        contact.setEmail("x5t@gmail.com");
+        contact.setName("X5");
+        contact.setUrl("https://www.x5.com");
 
         License mitLicense = new License().name("MIT License").url("https://choosealicense.com/licenses/mit/");
 
         Info info = new Info()
-                .title("Tutorial Management API")
+                .title("LTAPP - Load Testing Application API")
                 .version("1.0")
                 .contact(contact)
-                .description("This API exposes endpoints to manage tutorials.").termsOfService("https://www.xset.com/terms")
+                .description("API for load testing training. Includes authentication, document management, " +
+                           "Kafka messaging, and datapool generation. All business endpoints require JWT authentication.")
+                .termsOfService("https://www.x5t.com/terms")
                 .license(mitLicense);
 
-        return new OpenAPI().info(info).servers(List.of(devServer, prodServer));
+        // Add JWT security scheme
+        Components components = new Components();
+        components.addSecuritySchemes("bearerAuth",
+                new SecurityScheme()
+                        .type(SecurityScheme.Type.HTTP)
+                        .scheme("bearer")
+                        .bearerFormat("JWT")
+                        .description("JWT token obtained from /api/auth/login"));
+
+        // Add security requirement to all endpoints (can be overridden per endpoint)
+        SecurityRequirement securityRequirement = new SecurityRequirement().addList("bearerAuth");
+
+        return new OpenAPI()
+                .info(info)
+                .servers(List.of(devServer, prodServer))
+                .components(components)
+                .addSecurityItem(securityRequirement);
     }
 }

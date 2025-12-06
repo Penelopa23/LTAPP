@@ -8,7 +8,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface DocsRepository extends CrudRepository<DocEntity, Long> {
+public interface DocsRepository extends CrudRepository<DocEntity, Integer> {
     @Timed("findDoc")
     List<DocEntity> findByName(String name);
 }

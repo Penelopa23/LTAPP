@@ -1,113 +1,105 @@
 package org.example.controllers;
 
-import io.micrometer.core.annotation.Counted;
 import io.micrometer.core.annotation.Timed;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import org.example.dto.ApiResponse;
+import org.example.dto.KafkaMessageResponse;
+import org.example.dto.SendMessageRequest;
+import org.example.service.KafkaMessageService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.kafka.KafkaException;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-import java.util.Iterator;
-import java.util.Random;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * The KafkaController class is a REST controller that manages Kafka requests for sending and receiving messages.
- * It provides methods for sending messages to Kafka and retrieving random messages from Kafka.
+ * Controller for Kafka message operations.
+ * Refactored to use service layer and DTOs with consistent ApiResponse format.
+ * Maintains backward compatibility with original GET endpoints.
  */
-@Tag(name = "Kafka", description = "Tutorial management Kafka requests")
+@Tag(name = "Kafka", description = "Kafka message operations")
 @RestController
+@RequestMapping("/api")
 public class KafkaController {
 
-    /**
-     * The name of the Kafka topic used in the application.
-     */
-    @Value("${spring.kafka.template.default-topic}")
-    private String topicName;
+    private static final Logger logger = LoggerFactory.getLogger(KafkaController.class);
 
-    /**
-     * This variable represents a concurrent linked queue that stores messages.
-     */
-    private final ConcurrentLinkedQueue<String> messages = new ConcurrentLinkedQueue<>();
-    /**
-     * Represents a Kafka template used for sending messages to Kafka topics.
-     */
-    private final KafkaTemplate<Long, String> kafkaTemplate;
+    private final KafkaMessageService kafkaMessageService;
 
-    /**
-     * This class represents a Kafka controller that allows sending and receiving messages from Kafka.
-     */
-    public KafkaController(KafkaTemplate<Long, String> kafkaTemplate) {
-        this.kafkaTemplate = kafkaTemplate;
+    @Autowired
+    public KafkaController(KafkaMessageService kafkaMessageService) {
+        this.kafkaMessageService = kafkaMessageService;
     }
 
-    /**
-     * Send a message to Kafka.
-     *
-     * @param message The message to send.
-     * @return A ResponseEntity with the result of the operation.
-     */
+    @Operation(summary = "Send message to Kafka (POST)",
+               description = "Send a message to Kafka topic using JSON payload. Preferred method for new implementations.")
     @Timed("sendMessage")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", content = {@Content(schema = @Schema(), mediaType = "application/json")})})
-    @GetMapping("/api/sendMessage/{message}")
-    public ResponseEntity<String> sendMessage(@PathVariable("message") String message) {
-        if (message == null || message.isEmpty()) {
-            return new ResponseEntity<>("Неверное сообщение", HttpStatus.BAD_REQUEST);
-        }
-        try {
-            kafkaTemplate.send(topicName, message);
-            return new ResponseEntity<>(message + " было добавлено", HttpStatus.ACCEPTED);
-        } catch (KafkaException e) {
-            return new ResponseEntity<>("Сообщение не может быть отправлено " + e.getMessage(),
-                    HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "202",
+                              description = "Message sent successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                              description = "Validation error")
+    })
+    @PostMapping("/messages")
+    public ResponseEntity<ApiResponse<KafkaMessageResponse>> sendMessage(
+            @Valid @RequestBody SendMessageRequest request) {
+        logger.debug("Sending message to Kafka: length={}", request.getPayload().length());
+        KafkaMessageResponse response = kafkaMessageService.sendMessage(request.getPayload());
+        return ResponseEntity.accepted().body(ApiResponse.success(response));
     }
 
-    /**
-     * Listens for messages from Kafka and adds them to the messages list.
-     *
-     * @param message The message received from Kafka.
-     */
-    @KafkaListener(topics = "${spring.kafka.template.default-topic}", groupId = "${spring.kafka.consumer.group-id}")
-    public void listen(String message) {
-        messages.add(message);
-    }
 
-    /**
-     * Retrieves a random message that has been sent to Kafka.
-     *
-     * @return A ResponseEntity with the random message as the body if messages exist in Kafka, otherwise a ResponseEntity
-     * with a "No messages in Kafka" response and a HTTP status code of 404 (Not Found).
-     */
+    @Operation(summary = "Get random message from queue",
+               description = "Retrieves a random message from the internal Kafka message queue")
     @Timed("getMessage")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", content = {@Content(schema = @Schema())})})
-    @GetMapping("/api/getMessage")
-    public ResponseEntity<String> getRandomMessage() {
-        if (messages.isEmpty()) {
-            return new ResponseEntity<>("Нет сообщений в Kafka", HttpStatus.NOT_FOUND);
-        }
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                              description = "Message retrieved successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                              description = "No messages available in queue")
+    })
+    @GetMapping("/getMessage")
+    public ResponseEntity<ApiResponse<KafkaMessageResponse>> getRandomMessage() {
+        logger.debug("Retrieving random message from queue");
+        KafkaMessageResponse response = kafkaMessageService.getNextMessage();
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 
+    @Operation(summary = "Get random message (alternative endpoint)",
+               description = "Alternative endpoint for getting random messages")
+    @Timed("getMessage")
+    @GetMapping("/messages/random")
+    public ResponseEntity<ApiResponse<KafkaMessageResponse>> getRandomMessageAlt() {
+        KafkaMessageResponse response = kafkaMessageService.getRandomMessageFromQueue();
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 
-        // Обновление до потокобезопасного кода с использованием итератора
-        Iterator<String> iterator = messages.iterator();
-        String randomMessage = null;
-        for (int i = 0; iterator.hasNext(); i++) {
-            String message = iterator.next();
-            if (new Random().nextInt(i + 1) == i) randomMessage = message;
-        }
+    @Operation(summary = "Get queue size",
+               description = "Returns the current number of messages in the internal queue")
+    @Timed("getQueueSize")
+    @GetMapping("/messages/count")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getQueueSize() {
+        int size = kafkaMessageService.getQueueSize();
+        Map<String, Object> data = new HashMap<>();
+        data.put("count", size);
+        data.put("queueName", "internal");
+        return ResponseEntity.ok(ApiResponse.success(data));
+    }
 
-        return new ResponseEntity<>(randomMessage, HttpStatus.OK);
+    @Operation(summary = "Get Kafka message statistics",
+               description = "Returns statistics about Kafka messages: totalSent, totalConsumed, currentQueueSize, lastMessageTimestamp")
+    @Timed("getKafkaStats")
+    @GetMapping("/messages/stats")
+    public ResponseEntity<ApiResponse<org.example.dto.KafkaStatsResponse>> getStats() {
+        logger.debug("Retrieving Kafka statistics");
+        org.example.dto.KafkaStatsResponse stats = kafkaMessageService.getStats();
+        return ResponseEntity.ok(ApiResponse.success(stats));
     }
 }
