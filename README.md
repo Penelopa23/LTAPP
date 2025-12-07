@@ -1,656 +1,395 @@
 # LTAPP - Load Testing Application
 
-## Overview
+## 1. Project Overview
 
-LTAPP (Load Testing Application) is a Spring Boot-based REST API designed as a **system-under-test** for load testing training. It provides a realistic, production-like application with authentication, document management, message queuing, and observability features that allow students to practice building comprehensive load testing scenarios.
+LTAPP is a Spring Boot 3.2.2 application built on Java 21, designed as a system-under-test for load testing and monitoring training. It provides a realistic REST API with authentication, document management, Kafka messaging, and comprehensive observability features. Students can use LTAPP as a target system for load testing tools like JMeter, k6, Locust, or Gatling.
 
-The application is built with modern Java and Spring Boot best practices, featuring a clean layered architecture, comprehensive error handling, and extensive configuration options suitable for various testing environments.
+The application uses modern Java and Spring Boot best practices, including layered architecture, DTOs, global exception handling, JWT-based authentication, Flyway database migrations, and structured logging. It integrates with PostgreSQL 15 for data persistence, Apache Kafka for message queuing, Prometheus for metrics collection, and Grafana for visualization.
 
-## Purpose
+## 2. Architecture
 
-LTAPP serves as a training platform where students can:
-- Practice load testing with realistic business scenarios
-- Learn to validate API responses beyond HTTP status codes
-- Understand authentication flows in load tests
-- Work with data-driven testing using datapools
-- Observe application behavior under load through metrics
-- Configure and deploy applications using environment variables
+LTAPP consists of the following components:
 
-## Technology Stack
+- **Spring Boot Application** (main class: `org.example.Main`)
+  - REST API with JWT authentication
+  - Document management with file upload/download
+  - Kafka producer and consumer
+  - Spring Boot Actuator for metrics
+  - Swagger/OpenAPI documentation
 
-- **Java 21** - Modern Java features and performance
-- **Spring Boot 3.2.2** - Application framework
-- **Spring Data JPA** - Database persistence layer
-- **PostgreSQL 16** - Relational database
-- **Flyway 10.7.1** - Database migration management
-- **Apache Kafka** - Message broker for asynchronous communication
-- **Spring Security** - Authentication and authorization
-- **JWT (JSON Web Tokens)** - Stateless authentication
-- **Micrometer + Prometheus** - Application metrics and monitoring
-- **SpringDoc OpenAPI 3** - API documentation (Swagger UI)
-- **Maven** - Build and dependency management
+- **PostgreSQL 15 Database**
+  - Database name: `ltapp`
+  - User: `ltappadm`
+  - Password: `ltappadm`
+  - Schema managed by Flyway migrations
+  - Tables: `users`, `documents`
 
-## Architecture
+- **Apache Kafka Broker** (latest image)
+  - Topic: `ltapp-messages` (auto-created)
+  - Ports: 9092 (PLAINTEXT), 9093 (CONTROLLER)
 
-### Layered Architecture
+- **Prometheus** (latest image)
+  - Scrapes metrics from `/actuator/prometheus`
+  - Configuration: `monitoring/prometheus.yml`
 
-The application follows a clean, layered architecture pattern:
+- **Grafana** (latest image)
+  - Default credentials: `admin` / `admin`
+  - Pre-configured to use Prometheus as data source
 
-```
-┌─────────────────────────────────────────┐
-│         Controllers Layer                │
-│  (REST endpoints, request validation)     │
-└─────────────────┬───────────────────────┘
-                  │
-┌─────────────────▼───────────────────────┐
-│          Service Layer                   │
-│  (Business logic, orchestration)         │
-└─────────────────┬───────────────────────┘
-                  │
-┌─────────────────▼───────────────────────┐
-│        Repository Layer                   │
-│  (Data access, Spring Data JPA)          │
-└─────────────────┬───────────────────────┘
-                  │
-┌─────────────────▼───────────────────────┐
-│         Database Layer                   │
-│  (PostgreSQL via Flyway migrations)      │
-└─────────────────────────────────────────┘
-```
-
-### Package Structure
+### Architecture Flow
 
 ```
-org.example/
-├── Main.java                          # Application entry point
-├── config/                            # Configuration classes
-│   └── SeedProperties.java            # Database seeding configuration
-├── controllers/                       # REST controllers
-│   ├── AuthController.java           # Authentication endpoints
-│   ├── DocsController.java           # Document management endpoints
-│   ├── KafkaController.java          # Kafka message endpoints
-│   ├── AdminDataController.java      # Datapool generation endpoints
-│   ├── ConfigureController.java      # Load control endpoints
-│   └── WebController.java            # Legacy signing endpoint
-├── service/                          # Business logic services
-│   ├── AuthService.java              # Authentication logic
-│   ├── DocService.java               # Document operations
-│   ├── KafkaMessageService.java      # Kafka message handling
-│   ├── AdminDataService.java         # Datapool generation
-│   ├── LoadControlService.java       # CPU/memory load control
-│   └── DatabaseSeeder.java           # Runtime data seeding
-├── database/                         # Data persistence
-│   ├── entity/                       # JPA entities
-│   │   ├── UserEntity.java           # User authentication entity
-│   │   └── DocEntity.java            # Document entity
-│   └── repository/                   # Spring Data repositories
-│       ├── UserRepository.java
-│       └── DocsRepository.java
-├── dto/                              # Data Transfer Objects
-│   ├── ApiResponse.java              # Unified response wrapper
-│   ├── DocResponse.java              # Document response DTOs
-│   ├── AuthResponse.java             # Authentication response
-│   └── ...                           # Other request/response DTOs
-├── security/                         # Security configuration
-│   ├── SecurityConfig.java           # Spring Security setup
-│   ├── JwtService.java               # JWT token operations
-│   └── JwtAuthenticationFilter.java  # JWT authentication filter
-├── exception/                        # Exception handling
-│   ├── GlobalExceptionHandler.java   # Global error handler
-│   ├── EntityNotFoundException.java  # Custom exceptions
-│   └── AuthenticationExceptionHandler.java # Auth error handler
-└── metrics/                          # Observability
-    └── TimedConfiguration.java      # Micrometer timing configuration
+Client → LTAPP (REST + JWT)
+         ↓
+    PostgreSQL (JPA + Flyway)
+         ↓
+    Kafka (producer + consumer)
+         ↓
+/actuator/prometheus → Prometheus → Grafana
 ```
 
-### Key Design Patterns
+## 3. Prerequisites
 
-- **Service Layer Pattern**: Business logic separated from controllers
-- **DTO Pattern**: Data Transfer Objects for request/response mapping
-- **Repository Pattern**: Data access abstraction via Spring Data JPA
-- **Strategy Pattern**: Configurable behavior via environment variables
-- **Factory Pattern**: `ApiResponse` factory methods for consistent responses
-- **Filter Pattern**: JWT authentication via servlet filter
+- **Docker** and **Docker Compose** installed
+- Optionally: **JDK 21** and **Maven** (only if you need to rebuild the application image locally)
 
-## Core Features
+Note: The Docker image uses `eclipse-temurin:21-jre-alpine` as the base image, which supports both x86_64 and ARM64 (Apple Silicon) architectures.
 
-### 1. Authentication & Authorization
+## 4. Quick Start with Docker Compose
 
-**JWT-based Stateless Authentication**
-
-- User registration and login endpoints
-- Password hashing with BCrypt
-- Role-based access control (ROLE_USER, ROLE_ADMIN)
-- Stateless JWT tokens with configurable expiration
-- Protected business endpoints requiring authentication
-
-**Endpoints:**
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Authenticate and receive JWT token
-
-**Public Endpoints:**
-- `/api/auth/**` - Authentication endpoints
-- `/actuator/**` - Health and metrics endpoints
-- `/swagger-ui/**`, `/v3/api-docs/**` - API documentation
-
-### 2. Document Management
-
-**Complete Document Lifecycle**
-
-- Document upload with metadata tracking
-- Document search with pagination
-- Document signing workflow (UPLOADED → SIGNED)
-- Document deletion
-- Version tracking for optimistic locking
-- Configurable processing delays for load testing
-
-**Endpoints:**
-- `POST /api/docs` - Upload document
-- `GET /api/docs/{id}` - Get document details
-- `GET /api/docs/search` - Search documents with pagination
-- `POST /api/docs/{id}/sign` - Sign existing document
-- `DELETE /api/docs/{id}` - Delete document
-- `POST /api/signDoc` - Legacy signing endpoint (backward compatible)
-
-**Document Status Workflow:**
-```
-UPLOADED → SIGNED
-```
-
-### 3. Kafka Message Processing
-
-**Asynchronous Message Handling**
-
-- Send messages to Kafka topics
-- Internal message queue for consumption
-- Message statistics and monitoring
-- Random message retrieval for testing
-
-**Endpoints:**
-- `POST /api/messages` - Send message to Kafka
-- `GET /api/messages/random` - Get random message from queue
-- `GET /api/messages/stats` - Get Kafka statistics
-- `GET /api/messages/count` - Get current queue size
-
-**Legacy Endpoints:**
-- `GET /api/sendMessage/{message}` - Legacy message sending
-- `GET /api/getMessage` - Legacy message retrieval
-
-### 4. Datapool Generation
-
-**Server-Side Test Data Generation**
-
-- Bulk document generation with configurable parameters
-- Bulk Kafka message generation
-- Datapool retrieval for external test tools
-- Admin-only endpoints for data management
-
-**Endpoints:**
-- `POST /api/admin/datapools/docs` - Generate documents in bulk
-- `GET /api/admin/datapools/docs` - Get document datapool
-- `POST /api/admin/datapools/messages` - Generate messages in bulk
-- `GET /api/admin/datapools/messages` - Get message datapool
-
-### 5. Load Control
-
-**Resource Stress Testing**
-
-- CPU load generation with configurable thread count
-- Memory leak simulation for testing
-- Start/stop controls for load scenarios
-
-**Endpoints:**
-- `GET /api/startCPULoad` - Start CPU load generation
-- `GET /api/stopCPULoad` - Stop CPU load
-- `GET /api/startLeak` - Start memory leak simulation
-- `GET /api/stopLeak` - Stop memory leak
-
-### 6. Observability
-
-**Metrics and Monitoring**
-
-- Micrometer integration with Prometheus
-- Custom timers for business operations
-- Actuator endpoints for health and metrics
-- Structured logging throughout the application
-
-**Available Endpoints:**
-- `/actuator/health` - Application health status
-- `/actuator/prometheus` - Prometheus metrics export
-- `/actuator/metrics` - Available metrics list
-
-### 7. Database Seeding
-
-**Runtime Test Data Generation**
-
-- Automatic data generation on application startup
-- Configurable user and document counts
-- Random but realistic test data
-- Only seeds empty databases (safety check)
-
-**Configuration:**
-- `LTAPP_SEED_ENABLED` - Enable/disable seeding
-- `LTAPP_SEED_USERS` - Number of users to generate
-- `LTAPP_SEED_DOCS_PER_USER` - Documents per user
-- `LTAPP_SEED_MAX_DOC_VERSION` - Maximum document version
-- `LTAPP_SEED_DAYS_RANGE` - Timestamp range for random dates
-
-## API Response Format
-
-All API responses follow a consistent JSON structure:
-
-**Success Response:**
-```json
-{
-  "success": true,
-  "message": "Operation completed successfully",
-  "data": {
-    // Response-specific data
-  },
-  "errors": [],
-  "timestamp": "2025-12-06T10:00:00Z",
-  "statusCode": 200
-}
-```
-
-**Error Response:**
-```json
-{
-  "success": false,
-  "message": "Operation failed",
-  "data": null,
-  "errors": [
-    {
-      "code": "VALIDATION_ERROR",
-      "message": "Field validation failed",
-      "field": "username"
-    }
-  ],
-  "timestamp": "2025-12-06T10:00:00Z",
-  "statusCode": 400
-}
-```
-
-This consistent format allows students to validate responses beyond HTTP status codes, checking `success` flags, `data` structure, and specific field values.
-
-## Database Schema
-
-### Users Table
-Stores user authentication information:
-- `id` (SERIAL PRIMARY KEY)
-- `username` (VARCHAR(50), UNIQUE, NOT NULL)
-- `password_hash` (VARCHAR(255), NOT NULL)
-- `email` (VARCHAR(255), UNIQUE)
-- `role` (VARCHAR(50), NOT NULL, DEFAULT 'ROLE_USER')
-- `created_at` (TIMESTAMP WITH TIME ZONE, NOT NULL)
-
-### Documents Table
-Stores document metadata and content:
-- `id` (SERIAL PRIMARY KEY)
-- `name` (VARCHAR(255), NOT NULL)
-- `document` (BYTEA, NOT NULL) - Binary document content
-- `status` (VARCHAR(20), NOT NULL, DEFAULT 'UPLOADED') - UPLOADED or SIGNED
-- `version` (INTEGER, NOT NULL, DEFAULT 1) - Optimistic locking
-- `uploaded_by` (VARCHAR(100))
-- `created_at` (TIMESTAMP WITH TIME ZONE, NOT NULL)
-
-### Schema Management
-
-The application uses **Flyway** for database schema versioning:
-- Initial migration: `V1__init_schema.sql`
-- Automatic schema creation on fresh databases
-- Version-controlled migrations
-- No runtime schema generation (production-ready)
-
-## Configuration
-
-### Environment Variables
-
-All critical settings are configurable via environment variables:
-
-**Database:**
-- `LTAPP_DB_URL` - Database connection URL
-- `LTAPP_DB_USER` - Database username
-- `LTAPP_DB_PASSWORD` - Database password
-
-**Kafka:**
-- `LTAPP_KAFKA_BOOTSTRAP_SERVERS` - Kafka bootstrap servers
-- `LTAPP_KAFKA_TOPIC` - Kafka topic name
-
-**Authentication:**
-- `LTAPP_AUTH_JWT_SECRET` - JWT secret key (required in production)
-- `LTAPP_AUTH_JWT_EXPIRATION` - Token expiration in seconds
-
-**Application:**
-- `LTAPP_SERVER_PORT` - Server port (default: 8080)
-- `LTAPP_SIGN_DELAY_MS` - Artificial delay for signing operations
-- `LTAPP_LOAD_CPU_THREADS` - CPU load generation thread count
-- `LTAPP_LOAD_LEAK_STEP_BYTES` - Memory leak step size
-
-**Database Seeding:**
-- `LTAPP_SEED_ENABLED` - Enable/disable seeding (default: false)
-- `LTAPP_SEED_USERS` - Number of users to generate
-- `LTAPP_SEED_DOCS_PER_USER` - Documents per user
-- `LTAPP_SEED_MAX_DOC_VERSION` - Maximum document version
-- `LTAPP_SEED_DAYS_RANGE` - Days range for random timestamps
-
-**Flyway:**
-- `LTAPP_FLYWAY_ENABLED` - Enable/disable Flyway (default: true)
-- `LTAPP_FLYWAY_BASELINE_ON_MIGRATE` - Baseline existing schema (default: false)
-- `LTAPP_FLYWAY_VALIDATE_ON_MIGRATE` - Validate migrations (default: true)
-
-### Configuration Files
-
-- `application.yaml` - Main configuration file with environment variable placeholders
-- `src/main/resources/db/migration/V1__init_schema.sql` - Initial database schema
-
-## Getting Started
-
-### Prerequisites
-
-- Java 21 or higher
-- Maven 3.6+
-- PostgreSQL 16 (running and accessible)
-- Apache Kafka (optional, for message features)
-
-### Database Setup
-
-1. **Create PostgreSQL database:**
-   ```sql
-   CREATE DATABASE ltapp;
-   ```
-
-2. **Configure connection** via environment variables or `application.yaml`
-
-### Running the Application
-
-1. **Set environment variables** (optional, defaults provided):
-   ```bash
-   export LTAPP_DB_URL=jdbc:postgresql://localhost:5432/postgres
-   export LTAPP_DB_USER=postgres
-   export LTAPP_DB_PASSWORD=your_password
-   export LTAPP_AUTH_JWT_SECRET=your-secret-key-min-32-chars
-   ```
-
-2. **Build and run:**
-   ```bash
-   mvn clean compile
-   mvn spring-boot:run
-   ```
-
-3. **Verify startup:**
-   - Application starts on port 8080 (configurable)
-   - Flyway migrations execute automatically
-   - Health endpoint: `http://localhost:8080/actuator/health`
-
-### Enabling Database Seeding
-
-To populate the database with test data on startup:
+### Step 1: Build the Application JAR
 
 ```bash
-export LTAPP_SEED_ENABLED=true
-export LTAPP_SEED_USERS=10
-export LTAPP_SEED_DOCS_PER_USER=50
-mvn spring-boot:run
+mvn clean package -DskipTests
 ```
 
-Seeded users have predictable passwords: `student1pass`, `student2pass`, etc.
+This creates `target/LTAPP-1.0-SNAPSHOT.jar`.
 
-## API Documentation
-
-Interactive API documentation is available via Swagger UI:
-
-- **Swagger UI**: `http://localhost:8080/swagger-ui.html`
-- **OpenAPI JSON**: `http://localhost:8080/v3/api-docs`
-
-The documentation includes:
-- All available endpoints
-- Request/response schemas
-- Authentication requirements
-- Example requests and responses
-- Try-it-out functionality
-
-## Testing Scenarios
-
-### Basic Load Test Flow
-
-1. **Authentication:**
-   ```
-   POST /api/auth/register → Create test user
-   POST /api/auth/login → Get JWT token
-   ```
-
-2. **Document Operations:**
-   ```
-   POST /api/docs → Upload document
-   GET /api/docs/{id} → Verify upload
-   POST /api/docs/{id}/sign → Sign document
-   GET /api/docs/{id} → Verify status = "SIGNED"
-   ```
-
-3. **Message Operations:**
-   ```
-   POST /api/messages → Send message
-   GET /api/messages/stats → Check statistics
-   GET /api/messages/random → Retrieve message
-   ```
-
-4. **Validation:**
-   - Check `success == true` in responses
-   - Validate `data.status == "SIGNED"`
-   - Verify `data.id` is not null
-   - Check `data.processingTimeMs > 0` for signed documents
-
-### Data-Driven Testing
-
-1. **Generate Datapool:**
-   ```
-   POST /api/admin/datapools/docs?count=1000
-   GET /api/admin/datapools/docs?limit=100
-   ```
-
-2. **Use in Load Test:**
-   - Extract document IDs from datapool response
-   - Use IDs in test scenarios
-   - Validate responses match datapool data
-
-## Monitoring
-
-### Prometheus Metrics
-
-Metrics are exposed at `/actuator/prometheus`:
-
-- HTTP request metrics (count, duration, percentiles)
-- Custom business metrics (document upload, signing, etc.)
-- JVM metrics (memory, threads, GC)
-- Database connection pool metrics
-
-### Health Checks
-
-Health endpoint at `/actuator/health` provides:
-- Application status (UP/DOWN)
-- Database connectivity
-- Component health status
-
-## Security
-
-### Authentication Flow
-
-1. User registers via `POST /api/auth/register`
-2. User logs in via `POST /api/auth/login`
-3. Application returns JWT token in response
-4. Client includes token in `Authorization: Bearer <token>` header
-5. `JwtAuthenticationFilter` validates token and sets authentication context
-
-### Password Security
-
-- Passwords are hashed using BCrypt
-- Never stored in plain text
-- Configurable password encoder strength
-
-### Endpoint Protection
-
-- Most business endpoints require authentication
-- Admin endpoints may require ROLE_ADMIN
-- Public endpoints: health checks, authentication, documentation
-
-## Error Handling
-
-### Global Exception Handler
-
-All exceptions are handled by `GlobalExceptionHandler`:
-- Validation errors → 400 Bad Request with field details
-- Entity not found → 404 Not Found
-- Authentication errors → 401 Unauthorized
-- Authorization errors → 403 Forbidden
-- Internal errors → 500 Internal Server Error
-
-All errors return consistent JSON format using `ApiResponse` wrapper.
-
-## Development
-
-### Building
+### Step 2: Build the Docker Image
 
 ```bash
-mvn clean compile        # Compile source code
-mvn clean package        # Build JAR file
-mvn spring-boot:run      # Run application
+docker build -t ltapp:local .
 ```
 
-### Project Structure
+### Step 3: Start All Services
 
-- `src/main/java` - Source code
-- `src/main/resources` - Configuration and resources
-  - `application.yaml` - Application configuration
-  - `db/migration/` - Flyway migration scripts
-- `src/test/java` - Test code (if present)
-- `pom.xml` - Maven build configuration
+```bash
+docker compose up -d
+```
 
-### Code Quality
+This starts PostgreSQL, Kafka, LTAPP, Prometheus, and Grafana containers.
 
-- Layered architecture with clear separation of concerns
-- DTOs for all external interfaces
-- Comprehensive error handling
-- Structured logging
-- Configuration externalization
-- Production-ready database migrations
+### Step 4: Verify Services
 
-## Production Considerations
+Wait a few seconds for all services to start, then check:
+
+- **Application**: http://localhost:8080
+- **Swagger UI**: http://localhost:8080/swagger-ui/index.html
+- **Prometheus**: http://localhost:9090
+- **Grafana**: http://localhost:3000 (default credentials: `admin` / `admin`)
+
+### Step 5: Stop and Clean Up
+
+```bash
+docker compose down -v
+```
+
+The `-v` flag removes volumes (database data, Kafka data, Grafana data).
+
+## 5. Configuration & Environment Variables
+
+All configuration is driven by environment variables with sensible defaults. In Docker Compose, these are already configured, but you can override them.
 
 ### Database
 
-- Use Flyway for all schema changes
-- Never use `ddl-auto: update` in production
-- Test migrations on staging first
-- Use connection pooling (HikariCP configured)
+- `LTAPP_DB_URL` - Database connection URL
+  - Default: `jdbc:postgresql://localhost:55000/ltapp`
+  - Docker: `jdbc:postgresql://postgres:5432/ltapp`
+- `LTAPP_DB_USER` - Database username
+  - Default: `postgres`
+  - Docker: `ltappadm`
+- `LTAPP_DB_PASSWORD` - Database password
+  - Default: empty
+  - Docker: `ltappadm`
 
-### Security
+In Docker Compose, the database connection is automatically wired to the `postgres` service.
 
-- Set strong `LTAPP_AUTH_JWT_SECRET` (minimum 32 characters)
-- Use HTTPS in production
-- Configure proper CORS policies
-- Review and restrict admin endpoints
+### Kafka
 
-### Monitoring
+- `LTAPP_KAFKA_BOOTSTRAP_SERVERS` - Kafka bootstrap servers
+  - Default: `0.0.0.0:9092`
+  - Docker: `kafka:9092`
+- `LTAPP_KAFKA_TOPIC` - Kafka topic name
+  - Default: `registration`
+  - Docker: `ltapp-messages`
 
-- Enable Prometheus metrics collection
-- Set up alerting on health endpoints
-- Monitor application logs
-- Track custom business metrics
+The Kafka container has `KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"`, so topics are created automatically on first use.
 
-### Performance
+### JWT Authentication
 
-- Configure appropriate connection pool sizes
-- Tune JVM parameters for your workload
-- Monitor database query performance
-- Use appropriate Kafka consumer configurations
+- `LTAPP_AUTH_JWT_SECRET` - JWT secret key (minimum 32 characters)
+  - Default: `dev-secret-key-change-in-production-min-32-chars`
+  - **Important**: Change this in production!
+- `LTAPP_AUTH_JWT_EXPIRATION` - Token expiration in seconds
+  - Default: `3600` (1 hour)
 
-## Example Load Testing Workflow
+JWT tokens are obtained via `POST /api/auth/login` and must be included in the `Authorization: Bearer <TOKEN>` header for protected endpoints.
 
-### 1. Setup and Authentication
+### Signing & Load Simulation
+
+- `LTAPP_SIGN_DELAY_MS` / `ltapp.sign.processing-delay-ms` - Artificial delay for document signing (milliseconds)
+  - Default: `0`
+- `LTAPP_LOAD_CPU_THREADS` / `ltapp.load.cpu-threads` - Number of threads for CPU load generation
+  - Default: `15`
+- `LTAPP_LOAD_LEAK_STEP_BYTES` / `ltapp.load.leak-step-bytes` - Memory leak step size in bytes
+  - Default: `1024`
+
+### Database Seeding (Test Data)
+
+- `LTAPP_SEED_ENABLED` - Enable/disable database seeding
+  - Default: `false`
+  - Docker: `true`
+- `LTAPP_SEED_USERS` - Number of users to generate
+  - Default: `10`
+- `LTAPP_SEED_DOCS_PER_USER` - Number of documents per user
+  - Default: `50`
+- `LTAPP_SEED_MAX_DOC_VERSION` - Maximum document version
+  - Default: `5`
+- `LTAPP_SEED_DAYS_RANGE` - Days range for random `createdAt` timestamps
+  - Default: `30`
+
+The seeder runs automatically at application startup if enabled and the database is empty enough (less than 5 users and 50 documents). It creates users with realistic names and documents with random content.
+
+### Server Port
+
+- `LTAPP_SERVER_PORT` - Server port
+  - Default: `8080`
+
+## 6. Authentication & Test Users
+
+### Seeded Users
+
+When database seeding is enabled, users are created with the following pattern:
+
+- **Username**: `{firstName}_{lastName}_{number}` (e.g., `alex_smith_1`, `maria_johnson_2`)
+- **Password**: `student{N}pass` where N is the user number (e.g., `student1pass`, `student2pass`)
+- **Email**: `{username}@student.test`
+- **Roles**: 90% `ROLE_USER`, 10% `ROLE_ADMIN` (randomly assigned)
+
+Example users:
+- Username: `alex_smith_1`, Password: `student1pass`
+- Username: `maria_johnson_2`, Password: `student2pass`
+
+### Login Example
 
 ```bash
-# Register a test user
-curl -X POST http://localhost:8080/api/auth/register \
+curl -X POST "http://localhost:8080/api/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"username":"testuser","password":"testpass123","email":"test@example.com"}'
-
-# Login and extract token
-TOKEN=$(curl -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"testuser","password":"testpass123"}' \
-  | jq -r '.data.accessToken')
+  -d '{
+    "username": "alex_smith_1",
+    "password": "student1pass"
+  }'
 ```
 
-### 2. Document Operations
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expiresIn": 3600,
+    "username": "alex_smith_1",
+    "tokenType": "Bearer",
+    "role": "ROLE_USER"
+  },
+  "errors": []
+}
+```
+
+### Using JWT Token
 
 ```bash
-# Upload document
-curl -X POST http://localhost:8080/api/docs \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "file=@document.pdf"
+TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
-# Sign document
-curl -X POST "http://localhost:8080/api/docs/1/sign?signAlgorithm=RSA-256" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Verify status
-curl -X GET http://localhost:8080/api/docs/1 \
-  -H "Authorization: Bearer $TOKEN"
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/api/docs/search?name=contract&page=0&size=10
 ```
 
-### 3. Response Validation
+### Register New User
 
-Students can validate responses using:
-- `success == true` flag
-- `data.status == "SIGNED"`
-- `data.processingTimeMs > 0`
-- `data.id` is not null
-- `data.uploadedBy` matches authenticated user
+```bash
+curl -X POST "http://localhost:8080/api/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "newuser",
+    "password": "password123",
+    "email": "newuser@example.com"
+  }'
+```
 
-## Troubleshooting
+## 7. REST API Overview
 
-### Application Won't Start
+All business endpoints require JWT authentication (except `/api/auth/**` and `/actuator/**`). The best way to explore all endpoints is via Swagger UI at http://localhost:8080/swagger-ui/index.html.
 
-**Database Connection Issues:**
-- Verify PostgreSQL is running
-- Check `LTAPP_DB_URL`, `LTAPP_DB_USER`, `LTAPP_DB_PASSWORD`
-- Ensure database exists
+### Authentication
 
-**Flyway Migration Issues:**
-- For existing databases: set `LTAPP_FLYWAY_BASELINE_ON_MIGRATE=true`
-- For fresh databases: ensure Flyway is enabled
-- Check migration files in `src/main/resources/db/migration/`
+- `POST /api/auth/register` - Register a new user (returns JWT)
+- `POST /api/auth/login` - Authenticate and get JWT token
 
-**Port Already in Use:**
-- Change `LTAPP_SERVER_PORT` environment variable
-- Or stop the process using port 8080
+### Documents
 
-### Seeding Not Working
+- `POST /api/docs` - Upload a document (multipart/form-data, requires authentication)
+- `GET /api/docs/{id}` - Get document metadata by ID
+- `GET /api/docs/search?name=...&page=...&size=...` - Search documents with pagination
+- `DELETE /api/docs/{id}` - Delete a document by ID
+- `POST /api/docs/{id}/sign` - Sign an existing document by ID
+- `POST /api/signDoc` - Upload file and simulate signing (legacy endpoint, still supported)
 
-- Verify `LTAPP_SEED_ENABLED=true`
-- Check database is empty enough (< 5 users, < 50 documents)
-- Review application logs for seeding messages
-- Ensure tables exist (Flyway migrations completed)
+### Kafka Messages
 
-### Authentication Issues
+- `POST /api/messages` - Send a JSON message to Kafka topic
+- `GET /api/messages/random` - Get a random message from internal queue
+- `GET /api/messages/count` - Get current queue size
+- `GET /api/messages/stats` - Get Kafka statistics (totalSent, totalConsumed, currentQueueSize, lastMessageTimestamp)
+- `GET /api/getMessage` - Get next message from queue (legacy endpoint, still supported)
 
-- Verify JWT secret is set: `LTAPP_AUTH_JWT_SECRET`
-- Check token expiration: `LTAPP_AUTH_JWT_EXPIRATION`
-- Ensure token is included in `Authorization: Bearer <token>` header
-- Verify user exists in database
+### Admin Data Pools
 
-## Additional Resources
+- `POST /api/admin/datapools/docs?count=...&namePrefix=...` - Generate documents in bulk (requires ADMIN role)
+- `GET /api/admin/datapools/docs?limit=...&status=...&namePrefix=...` - Get documents for datapool
+- `POST /api/admin/datapools/messages?count=...&pattern=...` - Generate Kafka messages in bulk (requires ADMIN role)
+- `GET /api/admin/datapools/messages?limit=...` - Get messages for datapool
 
-- **Flyway Migration Guide**: See `FLYWAY_MIGRATION_GUIDE.md`
-- **Database Seeding Guide**: See `DATABASE_SEEDING_GUIDE.md`
-- **API Documentation**: Available at `/swagger-ui.html` when application is running
+### Load Simulation (Hidden from Swagger, requires ADMIN role)
 
-## License
+- `GET /api/startLeak` - Enable memory leak (for training only)
+- `GET /api/stopLeak` - Disable memory leak
+- `GET /api/startCPULoad` - Enable CPU load generation (for training only)
+- `GET /api/stopCPULoad` - Disable CPU load generation
 
-This project is intended for educational purposes in load testing training.
+These endpoints are designed for load testing training scenarios to observe system behavior under resource stress.
 
-## Support
+## 8. Metrics & Monitoring
 
-For issues, questions, or contributions related to load testing scenarios, please refer to the project documentation or contact the training instructor.
+### Spring Boot Actuator Endpoints
 
+- `GET /actuator` - List all available actuator endpoints
+- `GET /actuator/health` - Application health status
+- `GET /actuator/prometheus` - Prometheus metrics (exposed in Prometheus format)
+
+### Prometheus Configuration
+
+Prometheus is configured via `monitoring/prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'ltapp'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['ltapp:8080']
+```
+
+Prometheus scrapes metrics every 5 seconds from `http://ltapp:8080/actuator/prometheus` (inside Docker network).
+
+### Grafana Setup
+
+1. Access Grafana at http://localhost:3000
+2. Login with default credentials: `admin` / `admin`
+3. Add Prometheus as a data source:
+   - URL: `http://prometheus:9090` (from inside Docker network) or `http://localhost:9090` (from host)
+   - Access: Server (default)
+4. Create dashboards using PromQL queries
+
+### Example PromQL Queries
+
+- `http_server_requests_seconds_count` - Total HTTP request count
+- `http_server_requests_seconds_sum` - Total request duration
+- `jvm_memory_used_bytes` - JVM memory usage
+- `jvm_gc_pause_seconds_count` - GC pause count
+- `kafka_producer_record_send_total` - Kafka messages sent (if Kafka metrics are exposed)
+
+## 9. Local Development without Docker
+
+### Running PostgreSQL and Kafka Locally
+
+You can run PostgreSQL and Kafka using Docker Compose while running the application locally:
+
+```bash
+# Start only PostgreSQL and Kafka
+docker compose up -d postgres kafka
+
+# Run the application from IDE or CLI
+mvn spring-boot:run
+```
+
+### Required Environment Variables for Local Run
+
+Set these environment variables before running the application:
+
+```bash
+export LTAPP_DB_URL="jdbc:postgresql://localhost:55000/ltapp"
+export LTAPP_DB_USER="ltappadm"
+export LTAPP_DB_PASSWORD="ltappadm"
+export LTAPP_KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
+export LTAPP_KAFKA_TOPIC="ltapp-messages"
+export LTAPP_AUTH_JWT_SECRET="dev-secret-key-change-in-production-min-32-chars"
+export LTAPP_AUTH_JWT_EXPIRATION="3600"
+```
+
+Or create an `application-local.yml` file in `src/main/resources/` with these values.
+
+### Running from IDE
+
+1. Set the active profile to `local` (if using `application-local.yml`)
+2. Ensure PostgreSQL and Kafka are running (via Docker Compose or locally)
+3. Run `org.example.Main` as a Java application
+
+## 10. Troubleshooting
+
+### Connection Refused to PostgreSQL
+
+- **Symptom**: `Connection to 0.0.0.0:55000 refused`
+- **Solution**: 
+  - Check that the PostgreSQL container is running: `docker compose ps`
+  - Verify environment variables match `docker-compose.yaml`:
+    - `LTAPP_DB_URL` should be `jdbc:postgresql://postgres:5432/ltapp` (inside Docker) or `jdbc:postgresql://localhost:55000/ltapp` (from host)
+    - `LTAPP_DB_USER` and `LTAPP_DB_PASSWORD` should match `POSTGRES_USER` and `POSTGRES_PASSWORD` in `docker-compose.yaml`
+
+### Kafka UNKNOWN_TOPIC_OR_PARTITION
+
+- **Symptom**: `UNKNOWN_TOPIC_OR_PARTITION` error when sending messages
+- **Solution**: 
+  - Ensure Kafka container is healthy: `docker compose logs kafka`
+  - Topics are auto-created, but wait a few seconds after Kafka starts
+  - Verify `LTAPP_KAFKA_BOOTSTRAP_SERVERS` is correct (`kafka:9092` in Docker, `localhost:9092` from host)
+
+### Ports Already in Use
+
+- **Symptom**: `Bind for 0.0.0.0:8080 failed: port is already allocated`
+- **Solution**: 
+  - Stop previous containers: `docker compose down`
+  - Check for local services using ports 8080, 9090, 3000, 9092, 9093
+  - Change ports in `docker-compose.yaml` if needed
+
+### Flyway Migration Errors
+
+- **Symptom**: `FlywayValidateException: Migrations have failed validation`
+- **Solution**: 
+  - For development/testing with existing schema, set `LTAPP_FLYWAY_VALIDATE_ON_MIGRATE=false`
+  - For fresh databases, ensure `LTAPP_FLYWAY_BASELINE_ON_MIGRATE=false`
+  - Drop and recreate the database if needed: `docker compose down -v && docker compose up -d`
+
+### Application Not Starting
+
+- **Symptom**: Application exits immediately or fails to start
+- **Solution**: 
+  - Check logs: `docker compose logs ltapp`
+  - Verify all dependencies are running: `docker compose ps`
+  - Ensure JAR file exists: `ls -la target/LTAPP-1.0-SNAPSHOT.jar`
+  - Rebuild if needed: `mvn clean package -DskipTests && docker build -t ltapp:local .`
+
+## 11. License / Usage Notice
+
+This project is intended for **educational and load testing practice purposes only**. It is not designed for production use. The application includes intentional features for training scenarios (memory leaks, CPU load generation) that should never be enabled in production environments.
+
+No LICENSE file is included in this repository. Use at your own risk for educational purposes.

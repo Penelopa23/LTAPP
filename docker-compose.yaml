@@ -1,11 +1,85 @@
-version: '3.7'
+version: '3.9'
 
 services:
   postgres:
-    image: postgres16:1
-    ports:
-      - 5432:5432
+    image: postgres:15
+    container_name: ltapp-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD:
-      POSTGRES_DB: postgres
+      POSTGRES_DB: ltapp
+      POSTGRES_USER: ltappadm          # ← был postgres
+      POSTGRES_PASSWORD: ltappadm      # ← тут тоже под себя
+    ports:
+      - "55000:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  kafka:
+    image: apache/kafka:latest
+    container_name: ltapp-kafka
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: "Mk3OEYBSD34fcwNTJENDM2Qk"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  ltapp:
+    image: ltapp:local
+    container_name: ltapp
+    depends_on:
+      - postgres
+      - kafka
+    environment:
+      LTAPP_DB_URL: jdbc:postgresql://postgres:5432/ltapp
+      LTAPP_DB_USER: ltappadm          # ← совпадает с POSTGRES_USER
+      LTAPP_DB_PASSWORD: ltappadm      # ← совпадает с POSTGRES_PASSWORD
+
+      LTAPP_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      LTAPP_KAFKA_TOPIC: ltapp-messages
+
+      LTAPP_AUTH_JWT_SECRET: dev-secret-key-change-in-production-min-32-chars
+      LTAPP_AUTH_JWT_EXPIRATION: 3600
+      LTAPP_SEED_ENABLED: "true"        # ← ВКЛЮЧАЕМ СИДЕР
+      # опционально:
+      # LTAPP_SEED_USERS: 10
+      # LTAPP_SEED_DOCS_PER_USER: 50
+    ports:
+      - "8080:8080"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ltapp-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - ltapp
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ltapp-grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  pgdata:
+  kafka-data:
+  grafana-data:
