@@ -239,26 +239,47 @@ All business endpoints require JWT authentication (except `/api/auth/**` and `/a
 ### Documents
 
 - `POST /api/docs` - Upload a document (multipart/form-data, requires authentication)
+  - Returns: `DocDetailsResponse` with `status="UPLOADED"`, `version=1`
 - `GET /api/docs/{id}` - Get document metadata by ID
+  - Returns: `DocDetailsResponse` with full metadata including status and version
 - `GET /api/docs/search?name=...&page=...&size=...` - Search documents with pagination
+  - Query parameters: `name` (required), `page` (default: 0), `size` (default: 10)
+  - Returns: `PageDto<DocResponse>` with paginated results
 - `DELETE /api/docs/{id}` - Delete a document by ID
+  - Returns: `DeleteResponse` with `deleted=true` flag
 - `POST /api/docs/{id}/sign` - Sign an existing document by ID
-- `POST /api/signDoc` - Upload file and simulate signing (legacy endpoint, still supported)
+  - Request body (optional): `{"signAlgorithm": "FAKE-RSA", "comment": "..."}`
+  - Query parameter (optional): `?signAlgorithm=FAKE-RSA`
+  - Updates document status to `"SIGNED"` and increments version
+  - Returns: `SignedDocResponse` with `processingTimeMs` for validation
 
 ### Kafka Messages
 
 - `POST /api/messages` - Send a JSON message to Kafka topic
+  - Request body: `{"payload": "message content"}`
+  - Returns: `KafkaMessageResponse` with `status="ENQUEUED"`, `messageId`, `payloadLength`
 - `GET /api/messages/random` - Get a random message from internal queue
+  - Returns: `KafkaMessageResponse` with message details
 - `GET /api/messages/count` - Get current queue size
-- `GET /api/messages/stats` - Get Kafka statistics (totalSent, totalConsumed, currentQueueSize, lastMessageTimestamp)
+  - Returns: `{"count": <number>, "queueName": "internal"}`
+- `GET /api/messages/stats` - Get Kafka statistics
+  - Returns: `KafkaStatsResponse` with `totalSent`, `totalConsumed`, `currentQueueSize`, `lastMessageTimestamp`
 - `GET /api/getMessage` - Get next message from queue (legacy endpoint, still supported)
 
 ### Admin Data Pools
 
-- `POST /api/admin/datapools/docs?count=...&namePrefix=...` - Generate documents in bulk (requires ADMIN role)
+- `POST /api/admin/datapools/docs?count=...&namePrefix=...&minSizeBytes=...&maxSizeBytes=...` - Generate documents in bulk (requires ADMIN role)
+  - Query parameters: `count` (required), `namePrefix` (default: "test_doc_"), `minSizeBytes` (default: 1024), `maxSizeBytes` (default: 10240)
+  - Returns: `DatapoolGenerationResponse` with `createdCount` and `sampleIds`
 - `GET /api/admin/datapools/docs?limit=...&status=...&namePrefix=...` - Get documents for datapool
+  - Query parameters: `limit` (default: 100), `status` (optional), `namePrefix` (optional)
+  - Returns: `List<DocResponse>` suitable for building external datapools
 - `POST /api/admin/datapools/messages?count=...&pattern=...` - Generate Kafka messages in bulk (requires ADMIN role)
+  - Query parameters: `count` (required), `pattern` (default: "test_message_{index}_{random}")
+  - Returns: `DatapoolGenerationResponse` with `createdCount`
 - `GET /api/admin/datapools/messages?limit=...` - Get messages for datapool
+  - Query parameters: `limit` (default: 100)
+  - Returns: `List<KafkaMessagePreview>` with message previews
 
 ### Load Simulation (Hidden from Swagger, requires ADMIN role)
 

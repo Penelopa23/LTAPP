@@ -104,5 +104,34 @@ public class DocsController {
         DeleteResponse response = docService.deleteDocument(id);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
+
+    @Operation(summary = "Sign existing document",
+               description = "Sign an existing document by ID. Updates status to 'SIGNED' and increments version. " +
+                           "Returns SignedDocResponse with processingTimeMs for validation.")
+    @Timed("signExistingDoc")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                              description = "Document signed successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                              description = "Document not found"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                              description = "Validation error")
+    })
+    @PostMapping("/{id}/sign")
+    public ResponseEntity<ApiResponse<SignedDocResponse>> signExistingDocument(
+            @PathVariable("id") Integer id,
+            @RequestBody(required = false) SignExistingDocRequest request,
+            @RequestParam(value = "signAlgorithm", required = false) String signAlgorithmParam,
+            Authentication authentication) {
+        String signedBy = authentication != null ? authentication.getName() : "anonymous";
+        String signAlgorithm = (request != null && request.getSignAlgorithm() != null) 
+                ? request.getSignAlgorithm() 
+                : signAlgorithmParam;
+        
+        logger.info("Signing existing document: id={}, by={}, algo={}", id, signedBy, signAlgorithm);
+        
+        SignedDocResponse response = docService.signExistingDocument(id, signedBy, signAlgorithm);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 }
 
