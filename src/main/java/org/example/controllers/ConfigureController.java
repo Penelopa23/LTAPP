@@ -21,7 +21,7 @@ import java.util.Map;
  * Hidden from Swagger but protected by authentication.
  * Optionally requires ADMIN role for security.
  */
-@Hidden
+
 @RestController
 @RequestMapping("/api")
 public class ConfigureController {
