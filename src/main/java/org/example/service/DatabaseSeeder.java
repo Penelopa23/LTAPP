@@ -110,6 +110,7 @@ public class DatabaseSeeder {
         List<UserEntity> users = new ArrayList<>();
         int userCount = seedProperties.getUsers();
 
+        users.add(seedAdminUser());
         for (int i = 0; i < userCount; i++) {
             String firstName = FIRST_NAMES[random.nextInt(FIRST_NAMES.length)];
             String lastName = LAST_NAMES[random.nextInt(LAST_NAMES.length)];
@@ -129,7 +130,6 @@ public class DatabaseSeeder {
             user.setUsername(username);
             user.setPasswordHash(passwordEncoder.encode(password));
             user.setEmail(email);
-            user.setRole(random.nextDouble() < 0.1 ? "ROLE_ADMIN" : "ROLE_USER"); // 10% chance of admin
             user.setCreatedAt(generateRandomTimestamp());
 
             UserEntity saved = userRepository.save(user);
@@ -139,6 +139,30 @@ public class DatabaseSeeder {
         logger.info("Created {} users", users.size());
         return users;
     }
+
+    private UserEntity seedAdminUser() {
+        String adminUsername = "ADMIN";
+        String adminEmail = "admin@mail.ru";
+
+        // Если уже есть такой пользователь — используем его
+        if (userRepository.existsByUsername(adminUsername)) {
+            logger.info("Admin user '{}' already exists. Skipping creation.", adminUsername);
+            return userRepository.findByUsername(adminUsername)
+                    .orElseThrow(() -> new IllegalStateException("Admin user existsByUsername but not found"));
+        }
+
+        UserEntity admin = new UserEntity();
+        admin.setUsername(adminUsername);
+        admin.setEmail(adminEmail);
+        admin.setRole("ROLE_ADMIN");
+        admin.setPasswordHash(passwordEncoder.encode("ADMIN"));
+        admin.setCreatedAt(Instant.now());
+
+        UserEntity saved = userRepository.save(admin);
+        logger.info("Admin user '{}' has been created with email {}", adminUsername, adminEmail);
+        return saved;
+    }
+
 
     /**
      * Generate random documents for users.

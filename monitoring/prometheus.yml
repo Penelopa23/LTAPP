@@ -1,16 +1,16 @@
 global:
   scrape_interval: 5s
 
+remote_write:
+  - url: "{{ .Values.prometheus.remoteWrite.url }}"
+    queue_config:
+      max_samples_per_send: {{ .Values.prometheus.remoteWrite.maxSamplesPerSend }}
+      capacity: {{ .Values.prometheus.remoteWrite.capacity }}
+
 scrape_configs:
   - job_name: 'ltapp'
     metrics_path: '/actuator/prometheus'
     static_configs:
       - targets: ['ltapp:8080']
         labels:
-          application: 'LT app'
-
-  # - job_name: 'node'
-  #   static_configs:
-  #     - targets: ['node-exporter:9100']
-  #       labels:
-  #         application: 'LT server'
+          application: "{{ .Values.student.repoName }}"

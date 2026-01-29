@@ -98,7 +98,7 @@ ltapp:
   #   LTAPP_SEED_MAX_DOC_VERSION - Maximum document version (default: 5)
   #   LTAPP_SEED_DAYS_RANGE - Days range for random createdAt timestamps (default: 30)
   seed:
-    enabled: ${LTAPP_SEED_ENABLED:false}
+    enabled: ${LTAPP_SEED_ENABLED:true}
     users: ${LTAPP_SEED_USERS:10}
     docs-per-user: ${LTAPP_SEED_DOCS_PER_USER:50}
     max-doc-version: ${LTAPP_SEED_MAX_DOC_VERSION:5}
